@@ -174,4 +174,69 @@ describe('App Component', () => {
       expect(screen.queryByText('Write better docs')).not.toBeInTheDocument();
     });
   });
+
+  test('toggles task completion and updates completed filter', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    const writeDocsCheckbox = await screen.findByLabelText('Mark Write docs as complete');
+    await act(async () => {
+      await user.click(writeDocsCheckbox);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Mark Write docs as incomplete')).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      await user.click(screen.getByText('Completed'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Write docs')).toBeInTheDocument();
+      expect(screen.getByText('Refactor code')).toBeInTheDocument();
+    });
+  });
+
+  test('shows API error when loading tasks fails', async () => {
+    server.use(
+      rest.get('/api/tasks', (req, res, ctx) => {
+        return res(ctx.status(500), ctx.json({ error: 'Server error' }));
+      })
+    );
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to fetch tasks/)).toBeInTheDocument();
+    });
+  });
+
+  test('shows validation when saving an edit with empty title', async () => {
+    const user = userEvent.setup();
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    const editButtons = await screen.findAllByText('Edit');
+    await act(async () => {
+      await user.click(editButtons[0]);
+    });
+
+    const editInput = screen.getByLabelText('Edit title for Write docs');
+    await act(async () => {
+      await user.clear(editInput);
+      await user.click(screen.getByText('Save'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Task title is required')).toBeInTheDocument();
+    });
+  });
 });

@@ -35,6 +35,32 @@ describe('API Endpoints', () => {
         expect(task).toHaveProperty('createdAt');
       });
     });
+
+    it('should return tasks ordered by completion and due date rules', async () => {
+      const noDueActive = await createTask('Order - Active No Due');
+      const dueActive = await createTask('Order - Active Due', '2099-01-01');
+      const completedTask = await createTask('Order - Completed', '2099-01-02');
+
+      const completeResponse = await request(app)
+        .patch(`/api/tasks/${completedTask.id}`)
+        .send({ completed: true })
+        .set('Accept', 'application/json');
+      expect(completeResponse.status).toBe(200);
+
+      const response = await request(app).get('/api/tasks');
+      expect(response.status).toBe(200);
+
+      const ids = response.body.map((task) => task.id);
+      const dueActiveIndex = ids.indexOf(dueActive.id);
+      const noDueActiveIndex = ids.indexOf(noDueActive.id);
+      const completedTaskIndex = ids.indexOf(completedTask.id);
+
+      expect(dueActiveIndex).toBeGreaterThanOrEqual(0);
+      expect(noDueActiveIndex).toBeGreaterThanOrEqual(0);
+      expect(completedTaskIndex).toBeGreaterThanOrEqual(0);
+      expect(dueActiveIndex).toBeLessThan(noDueActiveIndex);
+      expect(noDueActiveIndex).toBeLessThan(completedTaskIndex);
+    });
   });
 
   describe('POST /api/tasks', () => {
@@ -123,6 +149,47 @@ describe('API Endpoints', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error', 'Completed must be a boolean value');
+    });
+
+    it('should return 400 for empty title update', async () => {
+      const task = await createTask('Title Update Check');
+
+      const response = await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ title: '   ' })
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Task title is required');
+    });
+
+    it('should return 400 for invalid due date update', async () => {
+      const task = await createTask('Due Date Validation');
+
+      const response = await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ dueDate: '2026/04/01' })
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Due date must be in YYYY-MM-DD format');
+    });
+
+    it('should return 404 when task does not exist', async () => {
+      const before = await request(app).get('/api/tasks');
+      expect(before.status).toBe(200);
+
+      const response = await request(app)
+        .patch('/api/tasks/999999')
+        .send({ title: 'No-op update' })
+        .set('Accept', 'application/json');
+
+      expect(response.status).toBe(404);
+      expect(response.body).toHaveProperty('error', 'Task not found');
+
+      const after = await request(app).get('/api/tasks');
+      expect(after.status).toBe(200);
+      expect(after.body.length).toBe(before.body.length);
     });
   });
 
